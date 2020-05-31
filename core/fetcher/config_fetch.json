@@ -1,0 +1,8 @@
+{
+  "client_profile_path": "./client_profile/client-config-avg-fidelity0.01.json",
+  "filtered_blocks_file": "./data/blockdata-client-config-avg-fidelity0.01_2.json",
+  "report_file": "report.13211.json",
+  "redis_db_path": "141.223.121.56:12000",
+  "start_blk_num": 8290,
+  "end_blk_num": 8290
+}
