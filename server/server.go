@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/rupc/audit/logging/flogging"
-	"github.com/rupc/audit/server/handler"
+	"github.com/rupc/Enforcer/logging/flogging"
+	"github.com/rupc/Enforcer/server/handler"
 )
 
 type System struct {

@@ -9,7 +9,7 @@ package flogging_test
 import (
 	"testing"
 
-	"github.com/rupc/audit/logging/flogging"
+	"github.com/rupc/Enforcer/logging/flogging"
 	"github.com/stretchr/testify/assert"
 )
 

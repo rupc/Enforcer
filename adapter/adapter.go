@@ -1,26 +1,28 @@
 package adapter
 
-import . "github.com/rupc/audit/atypes"
+import . "github.com/rupc/Enforcer/atypes"
 
-type BaasBlockReceiver interface {
+type BlockReceiver interface {
+	// Distill reduce a block into a minimal form, suit for analysis
 	Distill(interface{}) (*DistilledBlock, error)
-	// Extract is intended to be used in Distill function
+
+	// Extract filters special transactions in a distilledBlock
 	Extract(interface{}) []*SpecialTransaction
 }
 
-type BaasTxSender interface {
-	// Tailor transforms a specialtx into Baas-specific transaction format
+type Generator interface {
+	// Tailor transforms a specialtx into platform-specific transaction format
 	Tailor(SpecialTransaction) interface{}
-	// Submit sends tailored transaction to Baas endpoint
+	// Submit sends tailored transaction to a endpoint (e.g., ordering service in Hyperledger Fabric)
 	Submit(SpecialTransaction) TxID
 }
 
-// BaasAdapter lays a bridge between AuditCore and Baas-specific block structures
+// Adapter lays a bridge between AuditCore and platform-specific block structures
 // i.e., provides an abstraction on heterogeneous Baas-specifics
-// BaasAdapter must define behaviors which is different across providers
-type BaasAdapter interface {
-	BaasBlockReceiver
-	BaasTxSender
+// Adapter must define behaviors which is different across providers
+type Adapter interface {
+	BlockReceiver
+	Generator
 
 	// GetNewBlockEventer spawns a worker thread who probes a new block from BlockSourceAddress and
 	// injects newly incoming blocks to BlockStream channel.
@@ -42,7 +44,7 @@ type BaasAdapter interface {
 	// ---------------------------------------
 	GetNewBlockListener(chainID, srcAddr string) <-chan *DistilledBlock
 
-	BaasInitializer
+	Initializer
 }
 
 // Belows are interface of ledgermgmt from Fabric
@@ -54,7 +56,7 @@ type BaasAdapter interface {
 // GetBlockByTxID(txID string) (*common.Block, error)
 // GetTxValidationCodeByTxID(txID string) (peer.TxValidationCode, error)
 
-type BaasInitializer interface {
+type Initializer interface {
 	Initialize(chainID, blkAddr, txAddr string) error
 	// IsValidChainID(chainID string) bool
 	// CheckBlockFetchAddress(chainID, endPoint string) bool

@@ -4,14 +4,16 @@ import (
 	"errors"
 	"fmt"
 
-	. "github.com/rupc/audit/atypes"
-	"github.com/rupc/audit/logging/flogging"
-	"github.com/rupc/audit/util"
+	. "github.com/rupc/Enforcer/atypes"
+	"github.com/rupc/Enforcer/logging/flogging"
+	"github.com/rupc/Enforcer/util"
 )
 
 type PrefixAgreementConfig struct {
 	ChainID         string
 	NumberOfMembers uint64
+	MemberList      []string
+	QuorumSize      uint64
 }
 
 type PrefixAgreement struct {
@@ -64,12 +66,8 @@ type IntervalEntry struct {
 	end   uint64
 }
 
-func InitializePrefixAgreement(config PrefixAgreementConfig) *PrefixAgreement {
+func InitializePrefixAgreement(config *PrefixAgreementConfig) *PrefixAgreement {
 
-	//     consensusTable.AggregatedVoteTable = make([]uint64, defaultSize)
-	//     consensusTable.PerMemberHighestVotedBlockTable = make(map[core.VoterType]core.HeightType)
-	//     var defaultSize int = 100000
-	//     consensusTable.CommitBaseTable = make(map[core.HeightType]uint64)
 	consensusTable := initializeConsensusTable()
 	pa := &PrefixAgreement{
 		ChainID:         config.ChainID,
@@ -82,7 +80,9 @@ func InitializePrefixAgreement(config PrefixAgreementConfig) *PrefixAgreement {
 }
 
 func initializeConsensusTable() *ConsensusTable {
+	// TODO Remove fixed size of array. Rather than, use BaseHeight with garbage collecting committed heights
 	defaultSize := 20000
+
 	ct := &ConsensusTable{
 		AggregatedVoteTable:             make([]uint64, defaultSize),
 		PerMemberHighestVotedBlockTable: make(map[string]uint64),

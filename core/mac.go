@@ -11,9 +11,9 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/rupc/audit/atypes"
-	"github.com/rupc/audit/logging/flogging"
-	"github.com/rupc/audit/util"
+	"github.com/rupc/Enforcer/atypes"
+	"github.com/rupc/Enforcer/logging/flogging"
+	"github.com/rupc/Enforcer/util"
 )
 
 type MetricAnalysisResult struct {

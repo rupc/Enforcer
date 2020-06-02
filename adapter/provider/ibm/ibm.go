@@ -1,7 +1,7 @@
 package ibm
 
 import (
-	. "github.com/rupc/audit/atypes"
+	. "github.com/rupc/Enforcer/atypes"
 )
 
 type Provider struct {

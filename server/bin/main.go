@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
-	"github.com/rupc/audit/server"
+	"github.com/rupc/Enforcer/server"
 )
 
 // The main function is a server entry point.

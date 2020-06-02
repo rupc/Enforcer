@@ -1,6 +1,6 @@
 package core
 
-import "github.com/rupc/audit/core/pa"
+import "github.com/rupc/Enforcer/core/pa"
 
 type InterpretResult struct {
 	PAResult *pa.PrefixAgreementResult

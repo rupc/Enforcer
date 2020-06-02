@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rupc/audit/atypes"
-	"github.com/rupc/audit/core/pa"
+	"github.com/rupc/Enforcer/atypes"
+	"github.com/rupc/Enforcer/core/pa"
 )
 
 type SpecialTx struct {

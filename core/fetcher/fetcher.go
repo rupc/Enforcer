@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis"
-	"github.com/rupc/audit/atypes"
+	"github.com/rupc/Enforcer/atypes"
 	"github.com/tidwall/gjson"
 )
 

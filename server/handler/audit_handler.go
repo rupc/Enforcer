@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/rupc/audit/core/audit"
-	"github.com/rupc/audit/logging/flogging"
+	"github.com/rupc/Enforcer/core/audit"
+	"github.com/rupc/Enforcer/logging/flogging"
 )
 
 type AuditHandler struct {

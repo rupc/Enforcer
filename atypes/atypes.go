@@ -30,6 +30,11 @@ type SpecialTransaction struct {
 type MetricExtensions struct {
 }
 
+// Number: A block height
+// ChainID: Name of a blockchain network (e.g., channel name)
+// Hash: Datahash of each block (usually included in a block header)
+// TxSet: A filtered set of special transactions
+// TotalTxNum: For the fractions of special transactions in each block
 type DistilledBlock struct {
 	Number     uint64                `json:"number"`
 	ChainID    string                `json:"chain_id"`

@@ -13,7 +13,7 @@ import (
 	"sync"
 
 	logging "github.com/op/go-logging"
-	"github.com/rupc/audit/logging/flogging/fabenc"
+	"github.com/rupc/Enforcer/logging/flogging/fabenc"
 	zaplogfmt "github.com/sykesm/zap-logfmt"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"

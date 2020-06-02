@@ -14,8 +14,8 @@ import (
 	"testing"
 
 	"github.com/onsi/gomega/gbytes"
-	"github.com/rupc/audit/logging/flogging"
-	"github.com/rupc/audit/logging/flogging/fabenc"
+	"github.com/rupc/Enforcer/logging/flogging"
+	"github.com/rupc/Enforcer/logging/flogging/fabenc"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
 	"go.uber.org/zap/zapcore"

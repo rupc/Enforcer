@@ -8,20 +8,18 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/go-redis/redis"
 	"github.com/hyperledger/fabric/common/flogging"
-	"github.com/rupc/audit/adapter"
-	"github.com/rupc/audit/adapter/provider/fabric_client"
-	"github.com/rupc/audit/adapter/provider/ibm"
-	"github.com/rupc/audit/adapter/provider/kaleido"
-	"github.com/rupc/audit/adapter/provider/microsoft"
-	"github.com/rupc/audit/adapter/provider/oracle"
-	"github.com/rupc/audit/adapter/provider/sap"
-	"github.com/rupc/audit/adapter/provider/vmware"
-	"github.com/rupc/audit/atypes"
-	"github.com/rupc/audit/core"
-	"github.com/rupc/audit/core/fetcher"
-	"github.com/rupc/audit/core/pa"
+	"github.com/rupc/Enforcer/adapter"
+	"github.com/rupc/Enforcer/adapter/provider/fabric_client"
+	"github.com/rupc/Enforcer/adapter/provider/ibm"
+	"github.com/rupc/Enforcer/adapter/provider/kaleido"
+	"github.com/rupc/Enforcer/adapter/provider/microsoft"
+	"github.com/rupc/Enforcer/adapter/provider/oracle"
+	"github.com/rupc/Enforcer/adapter/provider/sap"
+	"github.com/rupc/Enforcer/adapter/provider/vmware"
+	"github.com/rupc/Enforcer/atypes"
+	"github.com/rupc/Enforcer/core"
+	"github.com/rupc/Enforcer/core/pa"
 )
 
 var logger *flogging.FabricLogger
@@ -39,8 +37,7 @@ type State struct {
 }
 
 type GeneratorPolicy struct {
-	// Expected special transactions per blocks, i.e., audit fidelity
-	ExpectedInterBlockDistance uint64
+	Fidelity uint64
 }
 
 // type CryptoKeyPair struct {
@@ -68,7 +65,11 @@ type GeneratorPolicy struct {
 //     fmt.Println("signature verified:", valid)
 // }
 
+type Status string
+
 type Auditor struct {
+	Status Status
+
 	// Client identity that requests to create the auditor
 	CreatorID string
 
@@ -99,13 +100,13 @@ type Auditor struct {
 	TxSubmitAddress    string
 	StateSendAddress   string
 	MetricFetchAddress string
-	Provider           adapter.BaasAdapter
+	Provider           adapter.Adapter
 
 	pa *pa.PrefixAgreement
 	ma *core.MetricAnalysis
 
 	// Redis DB client for fetching blocks and generating events (number, prepared, commit)
-	r *redis.Client
+	// r *redis.Client
 
 	// SentBlock contains paris of (blockNum, sent-or-not field)
 	// Because there should be exactly one special transaction per block,
@@ -118,7 +119,7 @@ type Auditor struct {
 	// XXX Underlying dtat structure would be bitmap-like
 	InterpretedBlocks map[uint64]bool
 
-	Fetcher fetcher.Fetcher
+	// Fetcher fetcher.Fetcher
 
 	Policy  GeneratorPolicy
 	Version string
@@ -133,8 +134,9 @@ type Auditor struct {
 // }
 
 var auditorPools = struct {
-	m    sync.RWMutex
-	list map[string]*Auditor
+	m        sync.RWMutex
+	list     map[string]*Auditor // per-names
+	channels map[string]*Auditor // per-channel auditors
 }{list: make(map[string]*Auditor)}
 
 func GetAuditorIDs() []string {
@@ -160,47 +162,69 @@ func IsValidAuditor(id string) bool {
 	return false
 }
 
-// InitializeAuditor is top-level initializer of Audit which returns AuditInstacne
+func IsValidAuditorByChainID(targetChainID string) bool {
+	auditorPools.m.Lock()
+	defer auditorPools.m.Unlock()
+	if _, ok := auditorPools.channels[targetChainID]; ok {
+		return true
+	}
+	return false
+}
+
+func GetAuditorByChainID(targetChainID string) (*Auditor, bool) {
+	auditorPools.m.Lock()
+	defer auditorPools.m.Unlock()
+	if auditor, ok := auditorPools.channels[targetChainID]; ok {
+		return auditor, true
+	}
+	return nil, false
+}
+
+// InitializeAuditor is top-level initializer of Auditor which returns AuditInstacne
 // It prepares all the data structures needed to start auditor service
 // It registers current auditor instance to audit_mgmt
-func InitializeAuditor(auditorID, creatorID, target, record, txsubmit_address, fidelity, state_send_address, fetch_method, metric_fetch_address, report_address, fetch_address string, MetricNames []string) (*Auditor, error) {
+func InitializeAuditor(auditorID, creatorID, target, record, txsubmit_address, fidelity, state_send_address, fetch_method, metric_fetch_address, report_address, fetch_address string, MetricNames []string, paConfig *pa.PrefixAgreementConfig) (*Auditor, error) {
 	auditorPools.m.Lock()
-	for k, v := range auditorPools.list {
-		logger.Debugf("auditorPools[%s] = [%s]", k, v)
-	}
+	// for k, v := range auditorPools.list {
+	// logger.Debugf("auditorPools[%s] = [%s]", k, v)
+	// }
 
 	if _, ok := auditorPools.list[auditorID]; ok {
-
 		errMsg := fmt.Sprintf("%s already exists, size of pools[%d]", auditorID, len(auditorPools.list))
 		// logger.Error(errMsg)
 		return nil, errors.New(errMsg)
 	}
+
+	if _, ok := auditorPools.channels[target]; ok {
+		errMsg := fmt.Sprintf("%s already exists, size of pools[%d]", target, len(auditorPools.channels))
+		// logger.Error(errMsg)
+		return nil, errors.New(errMsg)
+	}
+
 	auditorPools.m.Unlock()
 
 	// XXX For now, NumberOfMembers is: 4, after finishing testing
-	paConfig := pa.PrefixAgreementConfig{
-		ChainID:         target,
-		NumberOfMembers: 4,
-	}
-	maxAnalysisRequestBufferSize := 100
-	maxBlockArrivalBufferSize := 100
-	maxStateOutBufferSize := 100
+	// paConfig := pa.PrefixAgreementConfig{
+	// ChainID:         target,
+	// NumberOfMembers: len(paConfig.MemberList),
+	// MemberList: []string{"peer1", "peer2", "peer3", "peer4"}
+	// }
 
 	// XXX For now, Period 10 seconds, but it will be best-fit number
-	maConfig := core.MetricAnalysisConfig{
-		FetchMethod:            fetch_method,
-		FetchAddress:           metric_fetch_address,
-		ReportAddress:          report_address,
-		Period:                 10,
-		ScriptConfigFile:       "scripts/config.json",
-		AnalysisRequestChannel: make(chan *atypes.AnalysisRequest, maxAnalysisRequestBufferSize),
-	}
+	// maConfig := core.MetricAnalysisConfig{
+	// FetchMethod:            fetch_method,
+	// FetchAddress:           metric_fetch_address,
+	// ReportAddress:          report_address,
+	// Period:                 10,
+	// ScriptConfigFile:       "scripts/config.json",
+	// AnalysisRequestChannel: make(chan *atypes.AnalysisRequest, maxAnalysisRequestBufferSize),
+	// }
 
 	pa := pa.InitializePrefixAgreement(paConfig)
 	logger.Debug("PrefixAgreement initialized")
 
-	ma := core.InitializeMetricAnalysis(maConfig)
-	logger.Debug("MetricAnalysis initialized")
+	// ma := core.InitializeMetricAnalysis(maConfig)
+	// logger.Debug("MetricAnalysis initialized")
 
 	// p, err := GetProviderFromPlatform(platform, chainID, blkAddr, txAddr)
 
@@ -211,20 +235,23 @@ func InitializeAuditor(auditorID, creatorID, target, record, txsubmit_address, f
 	}
 
 	policy := GeneratorPolicy{
-		ExpectedInterBlockDistance: 1,
+		Fidelity: 1,
 	}
 
+	// maxAnalysisRequestBufferSize := 100
+	maxBlockArrivalBufferSize := 100
+	maxStateOutBufferSize := 100
 	BlockArrivalChannel := make(chan *atypes.DistilledBlock, maxBlockArrivalBufferSize)
 
 	// get redis client
-	r, err := GetRedisDBClient(fetch_address)
-	if err != nil {
-		logger.Error("Cannot get a redis client for", fetch_address)
-		panic(err)
-	}
+	// r, err := GetRedisDBClient(fetch_address)
+	// if err != nil {
+	// logger.Error("Cannot get a redis client for", fetch_address)
+	// panic(err)
+	// }
 
-	Fetcher := fetcher.Fetcher{}
-	Fetcher.Initialize(r)
+	// Fetcher := fetcher.Fetcher{}
+	// Fetcher.Initialize(r)
 
 	auditor := &Auditor{
 		AuditorID:           auditorID,
@@ -240,18 +267,19 @@ func InitializeAuditor(auditorID, creatorID, target, record, txsubmit_address, f
 		MetricFetchAddress: metric_fetch_address,
 		logger:             flogging.MustGetLogger(auditorID),
 		// Version:   version,
-		pa:                pa,
-		ma:                ma,
-		r:                 r,
+		pa: pa,
+		// ma:                ma,
+		// r:                 r,
 		SentBlocks:        make(map[uint64]bool),
 		InterpretedBlocks: make(map[uint64]bool),
 		Policy:            policy,
-		Fetcher:           Fetcher,
+		// Fetcher:           Fetcher,
 	}
 
 	// Add a new auditor to auditorPools
 	auditorPools.m.Lock()
 	auditorPools.list[auditorID] = auditor
+	auditorPools.channels[target] = auditor
 	auditorPools.m.Unlock()
 
 	// If dev mode, just run on initialization, otherwise, it should run on explicit run request
@@ -270,8 +298,8 @@ func (a *Auditor) NewBlockArrivalEvent(block *atypes.DistilledBlock) {
 	a.BlockArrivalChannel <- block
 }
 
-func GetProviderFromPlatform(platform, chainID, blkAddr, txAddr string) (adapter.BaasAdapter, error) {
-	var provider adapter.BaasAdapter
+func GetProviderFromPlatform(platform, chainID, blkAddr, txAddr string) (adapter.Adapter, error) {
+	var provider adapter.Adapter
 	switch platform {
 	// case "hyperledger/fabric":
 	//     provider = &fabric.Provider{}
@@ -301,19 +329,19 @@ func GetProviderFromPlatform(platform, chainID, blkAddr, txAddr string) (adapter
 	return provider, nil
 }
 
-func (a *Auditor) Generator(block *atypes.DistilledBlock) {
-	if block.Number%a.Policy.ExpectedInterBlockDistance == 0 {
-		tx := a.createSpecialTransaction(block)
-		a.submit(tx)
-	}
-}
+// func (a *Auditor) Generator(block *atypes.DistilledBlock) {
+// if block.Number%a.Policy.ExpectedInterBlockDistance == 0 {
+// tx := a.createSpecialTransaction(block)
+// a.submit(tx)
+// }
+// }
 
 func (a *Auditor) Run() {
 	a.logger.Infof("Auditor[%s] runs on target[%s] and record[%s]", a.AuditorID, a.TargetChainID, a.RecordChainID)
 
 	// Fetcher subscriber has its own goroutine
 	a.logger.Infof("Start new block subscriber !")
-	a.Fetcher.StartNewBlockSubscriber(a.BlockArrivalChannel)
+	// a.Fetcher.StartNewBlockSubscriber(a.BlockArrivalChannel)
 
 	go func() {
 		for {
@@ -406,13 +434,13 @@ func (a *Auditor) consumeResult(res *core.InterpretResult) {
 
 	// a.logger.Infof("ConsumeResult: %+v", state)
 
-	bytes, err := json.Marshal(res.PAResult)
-	if err != nil {
-		a.logger.Error("cannot marshal !")
-	}
+	// bytes, err := json.Marshal(res.PAResult)
+	// if err != nil {
+	// a.logger.Error("cannot marshal !")
+	// }
 
 	// publish output of a prefix analysis
-	a.r.Publish("prefix analysis", bytes)
+	// a.r.Publish("prefix analysis", bytes)
 
 	// a.StateOutputChannel <- state
 }
@@ -541,17 +569,17 @@ func (a *Auditor) InterpretedBefore(blockNum uint64) bool {
 //     // logger.Info("End of audit execution")
 // }
 
-func GetRedisDBClient(fetch_address string) (*redis.Client, error) {
-	r := redis.NewClient(&redis.Options{
-		Addr:     fetch_address,
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	})
+// func GetRedisDBClient(fetch_address string) (*redis.Client, error) {
+// r := redis.NewClient(&redis.Options{
+// Addr:     fetch_address,
+// Password: "", // no password set
+// DB:       0,  // use default DB
+// })
 
-	pong, err := r.Ping().Result()
-	if err != nil {
-		logger.Error(err, pong)
-	}
+// pong, err := r.Ping().Result()
+// if err != nil {
+// logger.Error(err, pong)
+// }
 
-	return r, err
-}
+// return r, err
+// }
